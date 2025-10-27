@@ -5,7 +5,7 @@ use Cake\ORM\Entity;
 
 class PaymentLogs extends Entity
 {
-    protected $_accessible = [
+    protected array $_accessible = [
         '*' => true,
         'id' => false,
     ];

@@ -93,21 +93,6 @@ class OrdersController extends AppController
             $data['payment_status'] = 'pending';
             $data['subtotal'] = $data['total_amount'];
 
-            // If VNPay selected, normalize data for redirect
-            if ($data['payment_method'] === 'vnpay') {
-                $data['order_info'] = 'VNPay payment';
-                $data['amount'] = $data['total_amount'] ?? 100000;
-                return $this->redirect([
-                    'controller' => 'Payments',
-                    'action' => 'create',
-                    '?' => [
-                        'order_id' => $data['order_code'] ?? null,
-                        'amount' => $data['total_amount'] ?? null,
-                        'order_info' => $data['order_info'],
-                    ]
-                ]);
-            }
-
             $order = $this->Orders->patchEntity($order, $data);
 
             if ($this->Orders->save($order)) {
@@ -116,7 +101,7 @@ class OrdersController extends AppController
                 // Log order creation
                 $this->PaymentLog->writeLog($order->id, $data['payment_method'], 'created', $order->total_amount, $this->request->clientIp());
 
-                // Xử lý theo phương thức thanh toán
+                // solve payment method
                 switch ($data['payment_method']) {
                     case 'cod':
                         return $this->handleCOD($order);
@@ -295,6 +280,18 @@ class OrdersController extends AppController
 
         if ($this->Orders->save($order)) {
             $this->Flash->success('Order status updated successfully!');
+
+            // if newStatus is delivered, update product stock
+            if ($newStatus === 'delivered') {
+                $orderItems = $this->Orders->OrderItems->find()
+                    ->where(['order_id' => $order->id])
+                    ->all();
+                foreach ($orderItems as $item) {
+                    $product = $this->Orders->OrderItems->Products->get($item->product_id);
+                    $product->stock -= $item->quantity;
+                    $this->Orders->OrderItems->Products->save($product);
+                }
+            }
 
             // Send notification email
             $this->sendStatusUpdateEmail($order);

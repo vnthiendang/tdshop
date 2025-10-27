@@ -22,7 +22,7 @@ class CreateOrdersAndRelatedTables extends BaseMigration
             ->addColumn('customer_phone', 'string', ['limit' => 20, 'null' => false])
             ->addColumn('customer_email', 'string', ['limit' => 255, 'null' => true])
             ->addColumn('shipping_address', 'text', ['null' => false])
-            ->addColumn('total_amount', 'decimal', ['precision' => 10, 'scale' => 2, 'null' => false])
+            ->addColumn('total_amount', 'decimal', ['precision' => 28, 'scale' => 6, 'null' => false])
             ->addColumn('payment_method', 'enum', [
                 'values' => ['cod', 'bank_transfer', 'vnpay', 'momo'],
                 'null' => false,
@@ -62,7 +62,7 @@ class CreateOrdersAndRelatedTables extends BaseMigration
             ->addColumn('order_id', 'integer', ['null' => false])
             ->addColumn('payment_method', 'string', ['limit' => 50, 'null' => true])
             ->addColumn('status', 'string', ['limit' => 50, 'null' => true])
-            ->addColumn('amount', 'decimal', ['precision' => 10, 'scale' => 2, 'null' => true])
+            ->addColumn('amount', 'decimal', ['precision' => 28, 'scale' => 6, 'null' => true])
             ->addColumn('transaction_data', 'text', ['null' => true])
             ->addColumn('ip_address', 'string', ['limit' => 45, 'null' => true])
             ->addColumn('created', 'datetime', ['default' => 'CURRENT_TIMESTAMP'])

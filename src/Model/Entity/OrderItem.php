@@ -5,7 +5,7 @@ use Cake\ORM\Entity;
 
 class OrderItem extends Entity
 {
-    protected $_accessible = [
+    protected array $_accessible = [
         '*' => true,
         'id' => false,
     ];

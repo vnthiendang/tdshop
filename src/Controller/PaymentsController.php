@@ -69,6 +69,16 @@ class PaymentsController extends AppController
         if ($responseCode == '00') {
             $this->Flash->success('Payment successful!');
             Log::write('info', "VNPay payment success - Order: $orderId, Transaction: $transactionNo");
+            try {
+                $order = $this->Orders->find()->where(['order_code' => $orderId])->first();
+                if ($order) {
+                    $order->payment_status = 'paid';
+                    $this->Orders->save($order);
+                    Log::write('info', "Order $orderId payment_status set to paid");
+                }
+            } catch (\Exception $e) {
+                Log::write('info', "Payment successfully for $orderId: " . $e->getMessage());
+            }
 
             $this->set(compact('orderId', 'amount', 'bankCode', 'transactionNo'));
             $this->viewBuilder()->setTemplate('payment_success');

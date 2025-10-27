@@ -76,7 +76,6 @@
                 </div>
 
                 <?php if ($currentUser): ?>
-                    <!-- <a href="/orders/checkout" class="button" style="width: 100%; margin-top: 20px; text-align: center;">Thanh toán</a> -->
                     <a href="/orders/checkout?cart_id=<?= $cart->id ?>" class="button" style="width: 100%; margin-top: 20px; text-align: center;">Checkout</a>
                 <?php else: ?>
                     <a href="/users/login?redirect=/checkout" class="button" style="width: 100%; margin-top: 20px; text-align: center;">Login to Checkout</a>

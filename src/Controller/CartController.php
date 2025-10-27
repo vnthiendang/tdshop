@@ -39,15 +39,21 @@ class CartController extends AppController
         
         $quantity = (int)$this->request->getData('quantity', 1);
         
+        $cart = $this->getCart();
+        $price = $product->price; // Get the discounted price
+        // get cart item quantity by product
+        $existingItem = $this->fetchTable('CartItems')->find()
+            ->where(['cart_id' => $cart->id, 'product_id' => $product->id])
+            ->first();
+        if ($existingItem) {
+            $quantity += $existingItem->quantity;
+        }
+        
         // Check stock availability
         if ($quantity > $product->stock) {
             $this->Flash->error('Quantity exceeds available stock!');
             return $this->redirect($this->referer());
         }
-        
-        $cart = $this->getCart();
-        $price = $product->price; // Get the discounted price
-        
         $this->fetchTable('CartItems')->addOrUpdate(
             $cart->id,
             $product->id,
