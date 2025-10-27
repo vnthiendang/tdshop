@@ -2,6 +2,7 @@
 
 /vendor/*
 /config/app.php
+/config/app_local.php
 
 /tmp/cache/models/*
 !/tmp/cache/models/empty
@@ -23,3 +24,24 @@
 /app/Config/core.php
 /app/Config/database.php
 /vendors/*
+
+# Environment specific files
+.env
+.env.local
+
+# IDE specific files and directories
+.idea/
+.vscode/
+*.iml
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Composer specific ignores
+/composer.lock
+
+# Other common ignores
+*.log
+*.bak
+*.swp
