@@ -30,24 +30,8 @@ class ProductsController extends AppController
             $query->where(['Products.name LIKE' => '%' . $search . '%']);
         }
         
-        // Sort
-        $sort = $this->request->getQuery('sort', 'newest');
-        switch ($sort) {
-            case 'price_asc':
-                $query->order(['Products.price' => 'ASC']);
-                break;
-            case 'price_desc':
-                $query->order(['Products.price' => 'DESC']);
-                break;
-            case 'name':
-                $query->order(['Products.name' => 'ASC']);
-                break;
-            default:
-                $query->order(['Products.created' => 'DESC']);
-        }
-        
         $products = $this->paginate($query, [
-            'limit' => 12
+            'limit' => 10
         ]);
         
         // Get categories list for filter
@@ -85,24 +69,42 @@ class ProductsController extends AppController
     }
     
     /**
-     * Products by category
+     * Product category listing
      */
     public function category($slug = null)
     {
-        $category = $this->fetchTable('Categories')
+        $categoriesTable = $this->fetchTable('Categories');
+        $productsTable = $this->fetchTable('Products');
+
+        // get all category (display sidebar/filter)
+        $categories = $categoriesTable
             ->find()
-            ->where(['slug' => 'iphone', 'status' => 'active'])
-            ->first();
-        
-        if (!$category) {
-            throw new \Cake\Http\Exception\NotFoundException('Category not found');
-        }
-        
-        $products = $this->Products->find('active')
-            ->where(['category_id' => $category->id])
-            ->contain(['Categories'])
+            ->where(['status' => 'active'])
+            ->orderAsc('name')
             ->all();
-        
-        $this->set(compact('category', 'products'));
+
+        $selectedCategory = null;
+        $productsQuery = $productsTable
+            ->find()
+            ->where(['Products.status' => 'active'])
+            ->contain(['Categories']);
+
+        // if slug -> filter category
+        if ($slug) {
+            $selectedCategory = $categoriesTable
+                ->find()
+                ->where(['slug' => $slug, 'status' => 'active'])
+                ->first();
+
+            if (!$selectedCategory) {
+                throw new NotFoundException('Category not found');
+            }
+
+            $productsQuery->where(['Products.category_id' => $selectedCategory->id]);
+        }
+
+        $products = $productsQuery->all();
+
+        $this->set(compact('categories', 'selectedCategory', 'products'));
     }
 }
