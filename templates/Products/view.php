@@ -1,17 +1,5 @@
 <div class="product-page container">
     <div class="product-main" style="display:flex;gap:24px;align-items:flex-start;">
-        <div class="product-gallery" style="flex:1;max-width:420px;">
-            <?php $primary = null; ?>
-            <?php if (!empty($product->product_images)): ?>
-                <?php foreach ($product->product_images as $img): ?>
-                    <?php if ($img->is_primary) { $primary = $img; break; } ?>
-                <?php endforeach; ?>
-                <?php if (!$primary) { $primary = $product->product_images[0]; } ?>
-                <img src="/img/products/<?= h($primary->file_name) ?>" alt="<?= h($product->name) ?>" style="width:100%;border-radius:8px;" onerror="this.src='/img/placeholder.jpg'">
-            <?php else: ?>
-                <img src="/img/placeholder.jpg" alt="<?= h($product->name) ?>" style="width:100%;border-radius:8px;">
-            <?php endif; ?>
-        </div>
 
         <div class="product-info" style="flex:1.2;">
             <h1><?= h($product->name) ?></h1>

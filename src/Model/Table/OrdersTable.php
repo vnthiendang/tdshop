@@ -46,7 +46,6 @@ class OrdersTable extends Table
         $order = $this->newEntity($orderData);
         
         if ($this->save($order)) {
-            // Tạo order items từ cart items
             $this->loadModel('OrderItems');
             foreach ($cart->cart_items as $cartItem) {
                 $orderItem = $this->OrderItems->newEntity([

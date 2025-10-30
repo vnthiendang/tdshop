@@ -3,10 +3,15 @@ namespace App\Controller;
 
 use App\Controller\AppController;
 use Cake\ORM\TableRegistry;
-use Cake\Http\Exception\NotFoundException;
+use Cake\Http\Exception\NotFoundException; use Cake\Log\Log;
 
 class ProductsController extends AppController
 {
+    public function initialize(): void
+    {
+        parent::initialize();
+        $this->Categories = TableRegistry::getTableLocator()->get('Categories');
+    }
     public function beforeFilter(\Cake\Event\EventInterface $event)
     {
         parent::beforeFilter($event);
@@ -16,29 +21,24 @@ class ProductsController extends AppController
     }
     public function index()
     {
-        $query = $this->Products->find('active')
-            ->contain(['Categories']);
-        
-        // Filter by category
-        if ($this->request->getQuery('category_id')) {
-            $query->where(['Products.category_id' => $this->request->getQuery('category_id')]);
-        }
-        
-        // Search by name
-        if ($this->request->getQuery('search')) {
-            $search = $this->request->getQuery('search');
-            $query->where(['Products.name LIKE' => '%' . $search . '%']);
-        }
+        $start = microtime(true);
+        $filters = [
+            'category_id' => $this->request->getQuery('category_id'),
+            'search' => $this->request->getQuery('search'),
+        ];
+
+        $query = $this->Products->findActiveProducts($filters);
         
         $products = $this->paginate($query, [
             'limit' => 10
         ]);
         
         // Get categories list for filter
-        $categories = $this->fetchTable('Categories')
-            ->find()
-            ->where(['status' => 'active'])
-            ->all();
+        $categories = $this->Categories->getCategoryList();
+
+        $elapsed = round((microtime(true) - $start) * 1000, 2); // ms
+
+        Log::error("Index page took {$elapsed} ms");
         
         $this->set(compact('products', 'categories'));
     }
@@ -48,23 +48,17 @@ class ProductsController extends AppController
      */
     public function view($id = null)
     {
-        $product = $this->Products->get($id, [
-            'contain' => ['Categories', 'ProductImages']
-        ]);
-        
-        if ($product->status !== 'active') {
+        $start = microtime(true);
+        $product = $this->Products->getActiveProductWithDetails($id);
+        if (!$product) {
             throw new NotFoundException('Product not found');
         }
         
         // Related products
-        $relatedProducts = $this->Products->find('active')
-            ->where([
-                'Products.category_id' => $product->category_id,
-                'Products.id !=' => $id
-            ])
-            ->limit(4)
-            ->all();
-        
+        $relatedProducts = $this->Products->getRelatedProducts($product->id, $product->category_id);
+        $elapsed = round((microtime(true) - $start) * 1000, 2); // ms
+
+        Log::error("get product details took {$elapsed} ms");
         $this->set(compact('product', 'relatedProducts'));
     }
     
@@ -73,37 +67,24 @@ class ProductsController extends AppController
      */
     public function category($slug = null)
     {
-        $categoriesTable = $this->fetchTable('Categories');
-        $productsTable = $this->fetchTable('Products');
-
         // get all category (display sidebar/filter)
-        $categories = $categoriesTable
-            ->find()
-            ->where(['status' => 'active'])
-            ->orderAsc('name')
-            ->all();
+        $categories = $this->Categories->getCategoryList();
 
         $selectedCategory = null;
-        $productsQuery = $productsTable
-            ->find()
-            ->where(['Products.status' => 'active'])
-            ->contain(['Categories']);
+        $categoryId = null;
 
         // if slug -> filter category
         if ($slug) {
-            $selectedCategory = $categoriesTable
-                ->find()
-                ->where(['slug' => $slug, 'status' => 'active'])
-                ->first();
+            $selectedCategory = $this->Categories->findBySlug($slug);
 
             if (!$selectedCategory) {
                 throw new NotFoundException('Category not found');
             }
 
-            $productsQuery->where(['Products.category_id' => $selectedCategory->id]);
+            $categoryId = $selectedCategory->id;
         }
 
-        $products = $productsQuery->all();
+        $products = $this->Products->getActiveByCategory($categoryId);
 
         $this->set(compact('categories', 'selectedCategory', 'products'));
     }

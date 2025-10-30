@@ -91,7 +91,7 @@ class AppController extends Controller
     protected function requireAdmin()
     {
         if (!$this->isAdmin()) {
-            $this->Flash->error('Bạn không có quyền truy cập!');
+            $this->Flash->error('Do not have access permission!');
             return $this->redirect(['controller' => 'Products', 'action' => 'index']);
         }
         return null;

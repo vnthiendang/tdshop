@@ -11,7 +11,7 @@
     
     <div class="actions">
         <?= $this->Html->link('Continue order', ['action' => 'index'], ['class' => 'btn btn-primary']) ?>
-        <?= $this->Html->link('View order', '#', ['class' => 'btn btn-secondary']) ?>
+        <?= $this->Html->link('View order', `/orders/view/$orderId`, ['class' => 'btn btn-secondary']) ?>
     </div>
 </div>
 

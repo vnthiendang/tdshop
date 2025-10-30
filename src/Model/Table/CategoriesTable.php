@@ -21,4 +21,22 @@ class CategoriesTable extends Table
             'foreignKey' => 'category_id',
         ]);
     }
+    
+    /**
+     * Get list of active categories
+     */
+    public function getCategoryList()
+    {
+        return $this->find()
+            ->select(['id', 'name', 'slug'])
+            ->where(['status' => 'active'])
+            ->orderAsc('name')
+            ->all();
+    }
+    public function findBySlug($slug)
+    {
+        return $this->find()
+            ->where(['slug' => $slug, 'status' => 'active'])
+            ->first();
+    }
 }

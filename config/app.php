@@ -131,6 +131,21 @@ return [
             'duration' => '+1 years',
             'url' => env('CACHE_CAKEMODEL_URL', null),
         ],
+        '_cake_core_' => [
+            'className' => 'Cake\Cache\Engine\RedisEngine',
+            'duration' => '+1 hours',
+            'prefix' => 'cake_core_',
+            'server' => '127.0.0.1',
+            'port' => 6379,
+            'persistent' => false,
+            'password' => null,
+            'database' => 0,
+        ],
+        'short' => [
+            'className' => 'Cake\Cache\Engine\RedisEngine',
+            'duration' => '+10 minutes',
+            'prefix' => 'short_',
+        ],
     ],
 
     /*

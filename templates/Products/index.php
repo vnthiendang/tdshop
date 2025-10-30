@@ -29,13 +29,7 @@
     <div class="product-grid">
         <?php foreach ($products as $product): ?>
             <div class="product-card">
-                <div class="product-image">
-                    <?php if (!empty($product->image)): ?>
-                        <img src="/img/products/<?= h($product->image) ?>" alt="<?= h($product->name) ?>">
-                    <?php else: ?>
-                        <img src="/img/no-image.png" alt="No image">
-                    <?php endif; ?>
-                </div>
+                
                 <div class="product-info">
                     <h3><?= h($product->name) ?></h3>
                     <p class="price"><?= number_format($product->price, 0, ',', '.') ?>₫</p>
