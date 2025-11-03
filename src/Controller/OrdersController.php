@@ -6,17 +6,16 @@ use App\Service\VNPayService;
 use App\Controller\AppController;
 use Cake\ORM\TableRegistry;
 use Cake\Http\Exception\ForbiddenException;
+use Cake\Http\Exception\NotFoundException;
+use App\Controller\Traits\ResponseTrait;
 
 class OrdersController extends AppController
 {
+    use ResponseTrait;
     // HTTP client setup
     public function initialize(): void
     {
         parent::initialize();
-        // $this->httpClient = new Client();
-        $this->Orders = TableRegistry::getTableLocator()->get('Orders');
-        $this->PaymentLogs = TableRegistry::getTableLocator()->get('PaymentLogs');
-        $this->Carts = TableRegistry::getTableLocator()->get('Carts');
         // Load shared payment logging component
         $this->loadComponent('PaymentLog');
     }
@@ -24,42 +23,22 @@ class OrdersController extends AppController
     public function dashboard()
     {
         // Only admins can access dashboard
-        $deny = $this->requireAdmin();
-        if ($deny) {
+        if ($deny = $this->requireAdmin()) {
             return $deny;
         }
-    // Overview statistics
-        $stats = [
-            'total_orders' => $this->Orders->find()->count(),
-            'pending_orders' => $this->Orders->find()->where(['order_status' => 'pending'])->count(),
-            'paid_orders' => $this->Orders->find()->where(['payment_status' => 'paid'])->count(),
-            'total_revenue' => $this->Orders->find()
-                ->where(['payment_status' => 'paid'])
-                ->select(['total' => 'SUM(total_amount)'])
-                ->first()
-                ->total ?? 0,
-            'today_orders' => $this->Orders->find()
-                ->where(['DATE(created)' => date('Y-m-d')])
-                ->count(),
-        ];
-        
-        // Orders needing processing
-        $pendingOrders = $this->Orders->find()
-            ->where(['order_status IN' => ['pending', 'confirmed']])
-            ->order(['created' => 'DESC'])
-            ->limit(10)
-            ->all();
-        
-        // Orders pending payment confirmation
-        $pendingPayments = $this->Orders->find()
-            ->where([
-                'payment_status' => 'pending',
-                'payment_proof IS NOT' => null
-            ])
-            ->order(['modified' => 'DESC'])
-            ->limit(10)
-            ->all();
-        
+
+        $stats = $this->Orders->getDashboardStats();
+        $pendingOrders = $this->Orders->getPendingOrders();
+        $pendingPayments = $this->Orders->getPendingPayments();
+
+        if ($this->request->is('ajax') || $this->request->accepts('application/json')) {
+            return $this->respondSuccess([
+                'stats' => $stats,
+                'pending_orders' => $pendingOrders,
+                'pending_payments' => $pendingPayments
+            ]);
+        }
+
         $this->set(compact('stats', 'pendingOrders', 'pendingPayments'));
     }
 
@@ -75,29 +54,16 @@ class OrdersController extends AppController
         $this->set(compact('orders'));
     }
 
-    public function createCod()
+    public function payments()
     {
         $order = $this->Orders->newEmptyEntity();
         
         if ($this->request->is('post')) {
             $data = $this->request->getData();
             $user = $this->Authentication->getIdentity();
-            $data['user_id'] = $user->id;
-            Log::error('Creating order with data: ' . json_encode($data));
-            
-            // Generate unique order code
-            $data['order_code'] = 'ORD' . date('YmdHis') . rand(100, 999);
+            $order = $this->Orders->createOrderFromUser($user, $data);
 
-            // Default statuses
-            $data['order_status'] = 'pending';
-            $data['payment_status'] = 'pending';
-            $data['subtotal'] = $data['total_amount'];
-
-            $order = $this->Orders->patchEntity($order, $data);
-
-            if ($this->Orders->save($order)) {
-                // del cart by user id
-                $this->Carts->deleteAll(['user_id' => $user->id]);
+            if ($order) {
                 // Log order creation
                 $this->PaymentLog->writeLog($order->id, $data['payment_method'], 'created', $order->total_amount, $this->request->clientIp());
 
@@ -138,8 +104,7 @@ class OrdersController extends AppController
      */
     public function checkout()
     {
-        $sessionId = $this->request->getSession()->id();
-        $cartItemsTable = TableRegistry::getTableLocator()->get('CartItems');
+        $cartItemsTable = $this->fetchTable('CartItems');
         $cartItems = $cartItemsTable->find()
             ->where(['cart_id' => $this->request->getQuery('cart_id')])
             ->contain(['Products'])
@@ -166,33 +131,6 @@ class OrdersController extends AppController
         }
 
         $this->set(compact('cartItems', 'order', 'total'));
-    }
-    
-    /**
-     * callback from VNPay (return_url)
-     */
-    public function vnpayReturn()
-    {
-        // Forward to Payments controller (route should be updated to Payments)
-        return $this->redirect([
-            'controller' => 'Payments',
-            'action' => 'vnpayReturn',
-            '?' => $this->request->getQueryParams()
-        ]);
-    }
-    
-    /**
-     * VNPay IPN webhook (to confirm payments)
-     * VNPay will call this URL to report results
-     */
-    public function vnpayIpn()
-    {
-        // Forward to Payments controller IPN handler
-        return $this->redirect([
-            'controller' => 'Payments',
-            'action' => 'vnpayIpn',
-            '?' => $this->request->getQueryParams()
-        ]);
     }
 
     /**
@@ -234,7 +172,11 @@ class OrdersController extends AppController
         if ($order->user_id != $user->id && $user->role != 'admin') {
             throw new ForbiddenException('You do not have permission to view this order!');
         }
-        $this->set(compact('order'));
+        // get order items
+        $orderItems = $this->Orders->OrderItems->find()
+            ->where(['order_id' => $order->id])
+            ->all();
+        $this->set(compact('order', 'orderItems'));
     }
     
     /**
@@ -267,77 +209,36 @@ class OrdersController extends AppController
     public function updateStatus($id = null)
     {
         $this->request->allowMethod(['post']);
-        // Require admin
-        $deny = $this->requireAdmin();
-        if ($deny) {
+        if ($deny = $this->requireAdmin()) {
             return $deny;
         }
 
-        $order = $this->Orders->get($id);
-        $newStatus = $this->request->getData('order_status');
-
-        $order->order_status = $newStatus;
-
-        if ($this->Orders->save($order)) {
-            $this->Flash->success('Order status updated successfully!');
-
-            // if newStatus is delivered, update product stock
-            if ($newStatus === 'delivered') {
-                $orderItems = $this->Orders->OrderItems->find()
-                    ->where(['order_id' => $order->id])
-                    ->all();
-                foreach ($orderItems as $item) {
-                    $product = $this->Orders->OrderItems->Products->get($item->product_id);
-                    $product->stock -= $item->quantity;
-                    $this->Orders->OrderItems->Products->save($product);
-                }
-            }
-
-            // Send notification email
-            $this->sendStatusUpdateEmail($order);
-        } else {
-            $this->Flash->error('Could not update status!');
+        try {
+            $order = $this->Orders->updateStatus($id, $this->request->getData('order_status'));
+            return $this->respondSuccess([
+                'message' => 'Order status updated',
+                'data' => ['order' => $order]
+            ], '/orders/dashboard');
+        } catch (RecordNotFoundException) {
+            return $this->respondError('Order not found', 404);
+        } catch (\Throwable $e) {
+            return $this->respondError('Update failed: ' . $e->getMessage(), 500);
         }
-
-        return $this->redirect(['action' => 'view', $id]);
     }
-
-    public function cancel($id = null)
+    public function cancel($id)
     {
         $this->request->allowMethod(['post']);
-        
         $user = $this->Authentication->getIdentity();
-        $order = $this->Orders->get($id);
-        
-        if ($user->role === 'admin') {
-            $canCancel = true;
-        } else {
-            if ($order->user_id != $user->id) {
-                throw new ForbiddenException('You do not have permission to cancel this order!');
-            }
-            
-            $canCancel = ($order->order_status === 'pending');
-        }
-        
-        if (!$canCancel) {
-            $this->Flash->error('Cannot cancel order in the current status!');
-            return $this->redirect(['action' => 'view', $id]);
-        }
-        
-        $order->order_status = 'cancelled';
-        // $order->payment_status = 'failed';
-        
-        if ($this->Orders->save($order)) {
-            $this->Flash->success('Order has been cancelled!');
 
-            // Log action
-            $actorRole = $user->role === 'admin' ? 'Admin' : 'Customer';
-            Log::write('info', "$actorRole cancelled order #{$order->order_code}");
-        } else {
-            $this->Flash->error('Could not cancel order!');
+        try {
+            $order = $this->Orders->cancelOrder($id, $user);
+            return $this->respondSuccess([
+                'message' => 'Order cancelled successfully',
+                'data' => ['order' => $order]
+            ], '/orders/dashboard');
+        } catch (\Throwable $e) {
+            return $this->respondError($e->getMessage(), 400);
         }
-        
-        return $this->redirect(['action' => 'view', $id]);
     }
     
     /**

@@ -116,7 +116,6 @@ function updateCartItem(itemId, quantity) {
     // prevent concurrent requests for same item
     if (_cartUpdatePending[itemId]) return;
     _cartUpdatePending[itemId] = true;
-    // Hiển thị loading state nếu cần
     const formData = new FormData();
     formData.append('quantity', quantity);
     

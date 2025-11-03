@@ -15,6 +15,7 @@ class OrderItemsTable extends Table
 
         $this->belongsTo('Orders', [
             'foreignKey' => 'order_id',
+            'joinType' => 'INNER',
         ]);
         $this->belongsTo('Products', [
             'foreignKey' => 'product_id',
@@ -38,9 +39,9 @@ class OrderItemsTable extends Table
             ->requirePresence('quantity', 'create')
             ->notEmptyString('quantity')
 
-            ->numeric('unit_price')
-            ->requirePresence('unit_price', 'create')
-            ->notEmptyString('unit_price');
+            ->numeric('price')
+            ->requirePresence('price', 'create')
+            ->notEmptyString('price');
 
         return $validator;
     }

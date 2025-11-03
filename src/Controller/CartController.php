@@ -4,9 +4,11 @@ namespace App\Controller;
 use App\Controller\AppController;
 use Cake\ORM\TableRegistry;
 use Cake\Http\Exception\NotFoundException;use Cake\Log\Log;
+use App\Controller\Traits\ResponseTrait;
 
 class CartController extends AppController
 {
+    use ResponseTrait;
     public function beforeFilter(\Cake\Event\EventInterface $event)
     {
         parent::beforeFilter($event);
@@ -29,40 +31,40 @@ class CartController extends AppController
         $this->request->allowMethod(['post']);
         $reqData = $this->request->getData();
         Log::error('Cart Add Request Data: ' . json_encode($reqData));
-        
-        $product = $this->fetchTable('Products')->get($reqData['product_id']);
-        
-        if ($product->status !== 'active') {
-            $this->Flash->error('Product is not available!');
-            return $this->redirect(['controller' => 'Products', 'action' => 'index']);
+
+        try {
+            $product = $this->fetchTable('Products')->getActiveProductWithDetails($reqData['product_id']);
+            $quantity = (int)($reqData['quantity'] ?? 1);
+            $cart = $this->getCart();
+
+            $existingItem = $this->fetchTable('CartItems')->find()
+                ->where(['cart_id' => $cart->id, 'product_id' => $product->id])
+                ->first();
+            if ($existingItem) {
+                $quantity += $existingItem->quantity;
+            }
+            if ($quantity > $product->stock) {
+                return $this->respondError('Quantity exceeds available stock!', 400, '/products');
+            }
+
+            $cartItemTable = $this->fetchTable('CartItems');
+            $cartItemTable->addOrUpdate(
+                $cart->id,
+                $product->id,
+                $quantity,
+                $product->price
+            );
+
+            return $this->respondSuccess([
+                'message' => 'Added to cart successfully!',
+                'data' => ['cartTotal' => (float)$cart->total]
+            ], '/products');
+        } catch (RecordNotFoundException $e) {
+            return $this->respondError('Product not found', 404, '/products');
+        } catch (\Exception $e) {
+            Log::error('Cart Add Error: ' . $e->getMessage());
+            return $this->respondError('Could not add to cart!', 500, '/products');
         }
-        
-        $quantity = (int)$this->request->getData('quantity', 1);
-        
-        $cart = $this->getCart();
-        $price = $product->price; // Get the discounted price
-        // get cart item quantity by product
-        $existingItem = $this->fetchTable('CartItems')->find()
-            ->where(['cart_id' => $cart->id, 'product_id' => $product->id])
-            ->first();
-        if ($existingItem) {
-            $quantity += $existingItem->quantity;
-        }
-        
-        // Check stock availability
-        if ($quantity > $product->stock) {
-            $this->Flash->error('Quantity exceeds available stock!');
-            return $this->redirect($this->referer());
-        }
-        $this->fetchTable('CartItems')->addOrUpdate(
-            $cart->id,
-            $product->id,
-            $quantity,
-            $price
-        );
-        
-        $this->Flash->success('Added to cart successfully!');
-        return $this->redirect($this->referer());
     }
     
     /**
@@ -71,76 +73,40 @@ class CartController extends AppController
     public function update($itemId = null)
     {
         $this->request->allowMethod(['post']);
+        $cartItemTable = $this->fetchTable('CartItems');
+        $productTable = $this->fetchTable('Products');
+    
+        try {
+            $cartItem = $cartItemTable->getItemWithProduct($itemId);
+            $quantity = (int)$this->request->getData('quantity', 1);
         
-        // Use find() to avoid deprecated Table::get() options usage
-        $cartItem = $this->fetchTable('CartItems')
-            ->find()
-            ->where(['CartItems.id' => $itemId])
-            ->contain(['Products'])
-            ->firstOrFail();
-        $quantity = (int)$this->request->getData('quantity', 1);
-        
-        if ($quantity <= 0) {
-            if ($this->request->is('ajax')) {
-                $this->response = $this->response->withType('application/json')
-                    ->withStringBody(json_encode([
-                        'success' => false,
-                        'error' => 'Invalid quantity'
-                    ]));
-                return $this->response->withStatus(400);
+            if ($quantity <= 0) {
+                return $this->respondError('Invalid quantity', 400);
             }
-            return $this->redirect(['action' => 'remove', $itemId]);
-        }
         
-        // Check stock
-        $product = $this->fetchTable('Products')->get($cartItem->product_id);
-        if ($quantity > $product->stock) {
-            if ($this->request->is('ajax')) {
-                $this->response = $this->response->withType('application/json')
-                    ->withStringBody(json_encode([
-                        'success' => false,
-                        'error' => 'Quantity exceeds available stock!'
-                    ]));
-                return $this->response->withStatus(400);
+            $product = $productTable->getActiveProductWithDetails($cartItem->product_id);
+            if ($quantity > $product->stock) {
+                return $this->respondError('Quantity exceeds available stock!', 400);
             }
-            $this->Flash->error('Quantity exceeds available stock!');
-            return $this->redirect(['action' => 'index']);
-        }
         
-        $cartItem->quantity = $quantity;
-        
-        if ($this->fetchTable('CartItems')->save($cartItem)) {
-            // get cart to recalculate totals
+            $cartItemTable->updateQuantity($cartItem, $quantity);
             $cart = $this->getCart();
-            
-            if ($this->request->is('ajax')) {
-                $this->response = $this->response->withType('application/json')
-                    ->withStringBody(json_encode([
-                        'success' => true,
-                        'message' => 'Cart updated successfully!',
-                        'data' => [
-                            'itemSubtotal' => (float)$cartItem->quantity * (float)$cartItem->price,
-                            'cartTotal' => (float)$cart->total,
-                            'cartTotalWithShipping' => (float)$cart->total,
-                            'totalItems' => $cart->total_items
-                        ]
-                    ]));
-                return $this->response->withStatus(200);
-            }
-            $this->Flash->success('Cart updated successfully!');
-        } else {
-            if ($this->request->is('ajax')) {
-                $this->response = $this->response->withType('application/json')
-                    ->withStringBody(json_encode([
-                        'success' => false,
-                        'error' => 'Could not update cart!'
-                    ]));
-                return $this->response->withStatus(500);
-            }
-            $this->Flash->error('Could not update cart!');
-        }
         
-        return $this->redirect(['action' => 'index']);
+            return $this->respondSuccess([
+                'message' => 'Cart updated successfully!',
+                'data' => [
+                    'itemSubtotal' => (float)$cartItem->quantity * (float)$cartItem->price,
+                    'cartTotal' => (float)$cart->total,
+                    'cartTotalWithShipping' => (float)$cart->total,
+                    'totalItems' => $cart->total_items
+                ]
+            ], '/cart');
+        
+        } catch (RecordNotFoundException $e) {
+            return $this->respondError('Cart item not found', 404, '/cart');
+        } catch (\Exception $e) {
+            return $this->respondError('Could not update cart!', 500, '/cart');
+        }
     }
     
     /**
@@ -149,10 +115,11 @@ class CartController extends AppController
     public function remove($itemId = null)
     {
         $this->request->allowMethod(['post', 'delete']);
+        $cartItemTable = $this->fetchTable('CartItems');
         
-        $cartItem = $this->fetchTable('CartItems')->get($itemId);
+        $cartItem = $cartItemTable->get($itemId);
         
-        if ($this->fetchTable('CartItems')->delete($cartItem)) {
+        if ($cartItemTable->delete($cartItem)) {
             $this->Flash->success('Item removed from cart successfully!');
         } else {
             $this->Flash->error('Could not remove item!');

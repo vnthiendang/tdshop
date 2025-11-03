@@ -80,9 +80,9 @@ return function (RouteBuilder $routes): void {
         $builder->connect('/cart/add', ['controller' => 'Cart', 'action' => 'add']);
         $builder->connect('/cart', ['controller' => 'Cart', 'action' => 'index']);
         $builder->connect('/cart/checkout', ['controller' => 'Cart', 'action' => 'checkout']);
-        $builder->connect('/payment', ['controller' => 'Orders', 'action' => 'index']);
+        // $builder->connect('/payment', ['controller' => 'Orders', 'action' => 'index']);
+        
         $builder->connect('/payment/create', ['controller' => 'Payments', 'action' => 'create']);
-        $builder->connect('/payment/create-cod', ['controller' => 'Orders', 'action' => 'createCod']);
         $builder->connect('/payment/vnpay-return', ['controller' => 'Payments', 'action' => 'vnpayReturn']);
         $builder->connect('/payment/vnpay-ipn', ['controller' => 'Payments', 'action' => 'vnpayIpn']);
         $builder->fallbacks();

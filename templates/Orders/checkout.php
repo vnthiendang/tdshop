@@ -24,7 +24,7 @@
     </table>
 
     <h3>Billing & Shipping</h3>
-    <?= $this->Form->create($order, ['url' => ['controller' => 'Orders', 'action' => 'createCod']]) ?>
+    <?= $this->Form->create($order, ['url' => ['controller' => 'Orders', 'action' => 'payments']]) ?>
         <div class="form-row">
             <?= $this->Form->control('customer_name', ['label' => 'Full name']) ?>
         </div>

@@ -47,33 +47,59 @@ function getPaymentBadge($status) {
             
             <div class="card mt-3">
                 <div class="card-header">
-                        <h3>Order Details</h3>
-                    </div>
-                    <div class="card-body">
-                        <p><strong>Total Amount:</strong> <?= number_format($order->total_amount) ?> VND</p>
-                        <p><strong>Payment Method:</strong> 
-                            <?php
-                            $methods = [
-                                'cod' => 'COD - Pay on Delivery',
-                                'bank_transfer' => 'Bank Transfer',
-                                'vnpay' => 'VNPay',
-                            ];
-                            echo $methods[$order->payment_method] ?? $order->payment_method;
-                            ?>
-                        </p>
-                    
-                        <?php if ($order->payment_date): ?>
-                            <p><strong>Payment Date:</strong> <?= $order->payment_date->format('d/m/Y H:i') ?></p>
-                        <?php endif; ?>
-                    
-                        <?php if ($order->transaction_id): ?>
-                            <p><strong>Transaction ID:</strong> <?= h($order->transaction_id) ?></p>
-                        <?php endif; ?>
-                    
-                        <?php if ($order->notes): ?>
-                            <p><strong>Notes:</strong> <?= h($order->notes) ?></p>
-                        <?php endif; ?>
-                    </div>
+                    <h3>Order Details</h3>
+                </div>
+                <div class="card-body">
+                     <!-- Order items table -->
+                    <table class="table table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Quantity</th>
+                                <th>Price (VND)</th>
+                                <th>Total (VND)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($orderItems as $item): ?>
+                            <tr>    
+                                <td>
+                                    
+                                    <?= h($item->product_name) ?>
+                                </td>
+                                <td><?= h($item->quantity) ?></td>
+                                <td><?= number_format($item->price) ?></td>
+                                <td><?= number_format($item->total) ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                
+            
+                    <p><strong>Total Amount:</strong> <?= number_format($order->total_amount) ?> VND</p>
+                    <p><strong>Payment Method:</strong> 
+                        <?php
+                        $methods = [
+                            'cod' => 'COD - Pay on Delivery',
+                            'bank_transfer' => 'Bank Transfer',
+                            'vnpay' => 'VNPay',
+                        ];
+                        echo $methods[$order->payment_method] ?? $order->payment_method;
+                        ?>
+                    </p>
+                
+                    <?php if ($order->payment_date): ?>
+                        <p><strong>Payment Date:</strong> <?= $order->payment_date->format('d/m/Y H:i') ?></p>
+                    <?php endif; ?>
+                
+                    <?php if ($order->transaction_id): ?>
+                        <p><strong>Transaction ID:</strong> <?= h($order->transaction_id) ?></p>
+                    <?php endif; ?>
+                
+                    <?php if ($order->notes): ?>
+                        <p><strong>Notes:</strong> <?= h($order->notes) ?></p>
+                    <?php endif; ?>
+                </div>
             </div>
             
             <!-- Display payment proof -->
