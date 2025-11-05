@@ -7,11 +7,9 @@ use App\Controller\AppController;
 use Cake\ORM\TableRegistry;
 use Cake\Http\Exception\ForbiddenException;
 use Cake\Http\Exception\NotFoundException;
-use App\Controller\Traits\ResponseTrait;
 
 class OrdersController extends AppController
 {
-    use ResponseTrait;
     // HTTP client setup
     public function initialize(): void
     {
@@ -32,14 +30,19 @@ class OrdersController extends AppController
         $pendingPayments = $this->Orders->getPendingPayments();
 
         if ($this->request->is('ajax') || $this->request->accepts('application/json')) {
-            return $this->respondSuccess([
-                'stats' => $stats,
-                'pending_orders' => $pendingOrders,
-                'pending_payments' => $pendingPayments
-            ]);
+            return $this->response
+                ->withType('application/json')
+                ->withStringBody(json_encode([
+                    'success' => true,
+                    'data' => [
+                        'stats' => $stats,
+                        'pending_orders' => $pendingOrders,
+                        'pending_payments' => $pendingPayments
+                    ]
+                ]));
         }
 
-        $this->set(compact('stats', 'pendingOrders', 'pendingPayments'));
+        // $this->set(compact('stats', 'pendingOrders', 'pendingPayments'));
     }
 
     public function index()
@@ -50,8 +53,13 @@ class OrdersController extends AppController
             ->where(['user_id' => $user->id])
             ->order(['created' => 'DESC'])
             ->all();
-        
-        $this->set(compact('orders'));
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode([
+                'success' => true,
+                'data' => $orders,
+            ]));
+        // $this->set(compact('orders'));
     }
 
     public function payments()
@@ -92,11 +100,24 @@ class OrdersController extends AppController
                         return $this->redirect(['action' => 'index']);
                 }
             } else {
-                   $this->Flash->error('Could not create order!');
+                //    $this->Flash->error('Could not create order!');
+                return $this->response
+                    ->withType('application/json')
+                    ->withStatus(400)
+                    ->withStringBody(json_encode([
+                        'success' => false,
+                        'message' => 'Could not create order!',
+                    ]));
             }
         }
         
         $this->set(compact('order'));
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode([
+                'success' => true,
+                'data' => $order,
+            ]));
     }
 
     /**
@@ -139,13 +160,16 @@ class OrdersController extends AppController
     private function handleCOD($order)
     {
         // COD does not require immediate payment
-        // Just confirm the order
-        $this->Flash->success('Order created! Payment will be collected on delivery.');
 
         // Send confirmation email (optional)
         $this->sendOrderConfirmationEmail($order);
-
-        return $this->redirect(['action' => 'view', $order->id]);
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode([
+                'success' => true,
+                'message' => 'Order created! Payment will be collected on delivery.',
+                'data' => ['order_id' => $order->id],
+            ]));
     }
     
     /**
@@ -153,10 +177,13 @@ class OrdersController extends AppController
      */
     private function handleBankTransfer($order)
     {
-        // Show bank transfer information
-        $this->Flash->info('Please transfer using the account below and upload the proof.');
-
-        return $this->redirect(['action' => 'bankTransferInfo', $order->id]);
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode([
+                'success' => true,
+                'message' => 'Order created! Please transfer using the provided bank account.',
+                'data' => ['order_id' => $order->id],
+            ]));
     }
     
     /**
@@ -176,7 +203,15 @@ class OrdersController extends AppController
         $orderItems = $this->Orders->OrderItems->find()
             ->where(['order_id' => $order->id])
             ->all();
-        $this->set(compact('order', 'orderItems'));
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode([
+                'success' => true,
+                'data' => [
+                    'order' => $order,
+                    'order_items' => $orderItems
+                ],
+            ]));
     }
     
     /**
@@ -199,7 +234,15 @@ class OrdersController extends AppController
             'transfer_content' => 'TT ' . $order->order_code,
         ];
         
-        $this->set(compact('order', 'bankInfo'));
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode([
+                'success' => true,
+                'data' => [
+                    'order' => $order,
+                    'bank_info' => $bankInfo
+                ],
+            ]));
     }
     
         
@@ -215,14 +258,29 @@ class OrdersController extends AppController
 
         try {
             $order = $this->Orders->updateStatus($id, $this->request->getData('order_status'));
-            return $this->respondSuccess([
-                'message' => 'Order status updated',
-                'data' => ['order' => $order]
-            ], '/orders/dashboard');
+            return $this->response
+                ->withType('application/json')
+                ->withStringBody(json_encode([
+                    'success' => true,
+                    'message' => 'Order status updated',
+                    'data' => ['order' => $order]
+                ]));
         } catch (RecordNotFoundException) {
-            return $this->respondError('Order not found', 404);
+            return $this->response
+                ->withType('application/json')
+                ->withStatus(404)
+                ->withStringBody(json_encode([
+                    'success' => false,
+                    'message' => 'Order not found',
+                ]));
         } catch (\Throwable $e) {
-            return $this->respondError('Update failed: ' . $e->getMessage(), 500);
+            return $this->response
+                ->withType('application/json')
+                ->withStatus(500)
+                ->withStringBody(json_encode([
+                    'success' => false,
+                    'message' => 'Update failed: ' . $e->getMessage(),
+                ]));
         }
     }
     public function cancel($id)
@@ -232,12 +290,21 @@ class OrdersController extends AppController
 
         try {
             $order = $this->Orders->cancelOrder($id, $user);
-            return $this->respondSuccess([
-                'message' => 'Order cancelled successfully',
-                'data' => ['order' => $order]
-            ], '/orders/dashboard');
+            return $this->response
+                ->withType('application/json')
+                ->withStringBody(json_encode([
+                    'success' => true,
+                    'message' => 'Order cancelled successfully',
+                    'data' => ['order' => $order]
+                ]));
         } catch (\Throwable $e) {
-            return $this->respondError($e->getMessage(), 400);
+            return $this->response
+                ->withType('application/json')
+                ->withStatus(400)
+                ->withStringBody(json_encode([
+                    'success' => false,
+                    'message' => 'Cancellation failed: ' . $e->getMessage(),
+                ]));
         }
     }
     

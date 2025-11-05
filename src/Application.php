@@ -72,6 +72,18 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
      */
     public function middleware(MiddlewareQueue $middlewareQueue): MiddlewareQueue
     {
+        $csrf = new CsrfProtectionMiddleware([
+            'httponly' => true,
+        ]);
+
+        $csrf->skipCheckCallback(function ($request) {
+            $path = $request->getPath();
+            $authHeader = $request->getHeaderLine('Authorization');
+            $isApiPath = str_starts_with($path, '/api') || str_starts_with($path, '/users/login');
+            $isBearerAuth = stripos($authHeader, 'Bearer ') === 0;
+            $isJson = strpos((string)$request->getHeaderLine('Content-Type'), 'application/json') !== false;
+            return $isApiPath || $isBearerAuth || $isJson;
+        });
         $middlewareQueue
             // Catch any exceptions in the lower layers,
             // and make an error page/response
@@ -95,9 +107,7 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
 
             // Cross Site Request Forgery (CSRF) Protection Middleware
             // https://book.cakephp.org/5/en/security/csrf.html#cross-site-request-forgery-csrf-middleware
-            ->add(new CsrfProtectionMiddleware([
-                'httponly' => true,
-            ]))
+            ->add($csrf)
             ->add(new AuthenticationMiddleware($this));
 
         return $middlewareQueue;
@@ -116,10 +126,9 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
 
     public function getAuthenticationService(ServerRequestInterface $request): AuthenticationServiceInterface
     {
-        $service = new AuthenticationService([
-            'unauthenticatedRedirect' => '/users/login',
-            'queryParam' => 'redirect',
-        ]);
+        // $path = $request->getPath();
+
+        $service = new AuthenticationService();
 
         // Load identifiers - identify user
         $service->loadIdentifier('Authentication.Password', [
@@ -132,9 +141,22 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
                 'userModel' => 'Users',
             ],
         ]);
-
-        $service->loadAuthenticator('Authentication.Session');
+        // Resolve user for JWT using `sub` claim (user id)
+        $service->loadIdentifier('Authentication.JwtSubject', [
+            'resolver' => [
+                'className' => 'Authentication.Orm',
+                'userModel' => 'Users',
+            ],
+        ]);
         
+        $service->loadAuthenticator('Authentication.Jwt', [
+            'secretKey' => env('JWT_SECRET'),
+            'algorithm' => 'HS256',
+            'returnPayload' => false,
+            'header' => 'Authorization',
+            // 'queryParam' => 'token',
+            'prefix' => 'Bearer',
+        ]);
         $service->loadAuthenticator('Authentication.Form', [
             'fields' => [
                 'username' => 'email',

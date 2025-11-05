@@ -4,6 +4,11 @@ namespace App\Controller;
 use App\Controller\AppController;
 use Cake\ORM\TableRegistry;
 use Cake\Log\Log;
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
+use App\Controller\Request;
+use App\Controller\Response;
+use Cake\Core\Configure;
 
 class UsersController extends AppController
 {
@@ -11,13 +16,12 @@ class UsersController extends AppController
     {
         parent::initialize();
         // $this->httpClient = new Client();
-        $this->Users = TableRegistry::getTableLocator()->get('Users');
     }
     public function beforeFilter(\Cake\Event\EventInterface $event)
     {
         parent::beforeFilter($event);
         
-        $this->Authentication->addUnauthenticatedActions(['register', 'login']);
+        $this->Authentication->allowUnauthenticated(['login', 'register']);
     }
     
     /**
@@ -25,9 +29,6 @@ class UsersController extends AppController
      */
     public function register()
     {
-        if ($this->Authentication->getIdentity()) {
-            return $this->redirect(['controller' => 'Products', 'action' => 'index']);
-        }
         $user = $this->Users->newEmptyEntity();
         
         if ($this->request->is('post')) {
@@ -36,17 +37,28 @@ class UsersController extends AppController
             $user->status = 'active';
             Log::error('Register user Data: ' . json_encode($user));
             if ($this->Users->save($user)) {
-                $this->Flash->success('Successfully! Please login.');
-                return $this->redirect(['action' => 'login']);
+                // return json response
+                return $this->response
+                    ->withType('application/json')
+                    ->withStringBody(json_encode([
+                        'success' => true,
+                        'message' => 'Registration successful! Please login.',
+                    ]));
+                
             }
             // Log validation errors for debugging
             if ($user->getErrors()) {
                 Log::error('User save failed: ' . json_encode($user->getErrors()));
+                return $this->response
+                    ->withType('application/json')
+                    ->withStatus(400)
+                    ->withStringBody(json_encode([
+                        'success' => false,
+                        'errors' => $user->getErrors(),
+                    ]));
             }
-            $this->Flash->error('Cannot register.');
         }
         
-        $this->set(compact('user'));
     }
     
     /**
@@ -55,19 +67,36 @@ class UsersController extends AppController
     public function login()
     {
         $this->request->allowMethod(['get', 'post']);
-        if ($this->Authentication->getIdentity()) {
-            return $this->redirect(['controller' => 'Products', 'action' => 'index']);
-        }
+
         $result = $this->Authentication->getResult();
-        
-        if ($result->isValid()) {
-            $this->mergeSessionCartToUser();
-            $redirect = $this->request->getQuery('redirect', '/products');
-            return $this->redirect($redirect);
+
+        if ($this->request->is('post') && $result->isValid()) {
+            $user = $this->Authentication->getIdentity();
+            $key = env('JWT_SECRET');
+
+            $payload = [
+                'sub' => $user->id,
+                'email' => $user->email,
+                'iat' => time(),
+                'exp' => time() + 86400,
+            ];
+
+            $jwt = JWT::encode($payload, $key, 'HS256');
+
+            return $this->response
+                ->withType('application/json')
+                ->withStringBody(json_encode([
+                    'success' => true,
+                    'token' => $jwt,
+                    'user' => $user,
+                ]));
         }
-        
+
         if ($this->request->is('post') && !$result->isValid()) {
-            $this->Flash->error('Email or password incorrect!');
+            return $this->response
+            ->withType('application/json')
+            ->withStatus(401)
+            ->withStringBody(json_encode(['success' => false, 'error' => 'Invalid credentials']));
         }
     }
     
@@ -76,32 +105,53 @@ class UsersController extends AppController
      */
     public function logout()
     {
-        $result = $this->Authentication->getResult();
-        if ($result->isValid()) {
-            $this->Authentication->logout();
-            $this->Flash->success('Logged out successfully!');
-        }
-        return $this->redirect(['controller' => 'Products', 'action' => 'index']);
+        $this->request->allowMethod(['post', 'get']);
+        $this->Authentication->logout();
+        // invalidate token
+        // Stateless JWT: client discards token; server keeps no session
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode(['message' => 'Logged out']));
     }
 
     public function profile()
     {
+        $this->request->allowMethod(['get', 'patch', 'post', 'put']);
         $user = $this->Authentication->getIdentity();
+        if (!$user) {
+            return $this->response
+                ->withStatus(401)
+                ->withType('application/json')
+                ->withStringBody(json_encode(['error' => 'Authentication required']));
+        }
         $userEntity = $this->Users->get($user->id);
-        
+
         if ($this->request->is(['patch', 'post', 'put'])) {
             $userEntity = $this->Users->patchEntity($userEntity, $this->request->getData(), [
                 'fieldList' => ['full_name', 'phone', 'address']
             ]);
-            
+
             if ($this->Users->save($userEntity)) {
-                $this->Flash->success('Profile updated successfully!');
-                return $this->redirect(['action' => 'profile']);
+                return $this->response
+                ->withType('application/json')
+                ->withStringBody(json_encode([
+                    'message' => 'Profile updated successfully!',
+                    // 'success' => true,
+                    'data' => $userEntity,
+                ]));
             }
-            $this->Flash->error('Could not update profile!');
+
+            return $this->response
+                ->withType('application/json')
+                ->withStatus(400)
+                ->withStringBody(json_encode(['error' => 'Could not update profile!']));
         }
-        
-        $this->set('user', $userEntity);
+
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode([
+                'data' => $userEntity
+            ]));
     }
 
     public function changePassword()

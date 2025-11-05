@@ -17,6 +17,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use Cake\Controller\Controller;
+use Cake\Log\Log;
 
 /**
  * Application Controller
@@ -49,10 +50,11 @@ class AppController extends Controller
          */
         //$this->loadComponent('FormProtection');
 
-        // Authentication
-        $this->loadComponent('Authentication.Authentication');
-        
-        // $this->loadComponent('Cart');
+        // Authentication - do not auto-throw before actions; we'll handle 401s
+        $this->loadComponent('Authentication.Authentication', [
+            'requireIdentity' => false,
+            'unauthenticatedRedirect' => false,
+        ]);
     }
 
     public function beforeFilter(\Cake\Event\EventInterface $event)

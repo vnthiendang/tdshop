@@ -40,7 +40,16 @@ class ProductsController extends AppController
 
         Log::error("Index page took {$elapsed} ms");
         
-        $this->set(compact('products', 'categories'));
+        // $this->set(compact('products', 'categories'));
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode([
+                'success' => true,
+                'data' => [
+                    'products' => $products,
+                    // 'categories' => $categories,
+                ],
+            ]));
     }
     
     /**
@@ -59,7 +68,16 @@ class ProductsController extends AppController
         $elapsed = round((microtime(true) - $start) * 1000, 2); // ms
 
         Log::error("get product details took {$elapsed} ms");
-        $this->set(compact('product', 'relatedProducts'));
+        // $this->set(compact('product', 'relatedProducts'));
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode([
+                'success' => true,
+                'data' => [
+                    'product' => $product,
+                    'relatedProducts' => $relatedProducts,
+                ],
+            ]));
     }
     
     /**
@@ -86,6 +104,15 @@ class ProductsController extends AppController
 
         $products = $this->Products->getActiveByCategory($categoryId);
 
-        $this->set(compact('categories', 'selectedCategory', 'products'));
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode([
+                'success' => true,
+                'data' => [
+                    'categories' => $categories,
+                    'selectedCategory' => $selectedCategory,
+                    'products' => $products,
+                ],
+            ]));
     }
 }

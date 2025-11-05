@@ -4,11 +4,9 @@ namespace App\Controller;
 use App\Controller\AppController;
 use Cake\ORM\TableRegistry;
 use Cake\Http\Exception\NotFoundException;use Cake\Log\Log;
-use App\Controller\Traits\ResponseTrait;
 
 class CartController extends AppController
 {
-    use ResponseTrait;
     public function beforeFilter(\Cake\Event\EventInterface $event)
     {
         parent::beforeFilter($event);
@@ -25,12 +23,17 @@ class CartController extends AppController
             $cart = $this->getCart();
         }
         $this->set('cart', $cart);
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode([
+                'success' => true,
+                'data' => $cart,
+            ]));
     }
     public function add()
     {
         $this->request->allowMethod(['post']);
         $reqData = $this->request->getData();
-        Log::error('Cart Add Request Data: ' . json_encode($reqData));
 
         try {
             $product = $this->fetchTable('Products')->getActiveProductWithDetails($reqData['product_id']);
@@ -44,7 +47,14 @@ class CartController extends AppController
                 $quantity += $existingItem->quantity;
             }
             if ($quantity > $product->stock) {
-                return $this->respondError('Quantity exceeds available stock!', 400, '/products');
+                // return $this->respondError('Quantity exceeds available stock!', 400, '/products');
+                return $this->response
+                    ->withType('application/json')
+                    ->withStatus(400)
+                    ->withStringBody(json_encode([
+                        'success' => false,
+                        'message' => 'Quantity exceeds available stock!',
+                    ]));
             }
 
             $cartItemTable = $this->fetchTable('CartItems');
@@ -55,15 +65,30 @@ class CartController extends AppController
                 $product->price
             );
 
-            return $this->respondSuccess([
-                'message' => 'Added to cart successfully!',
-                'data' => ['cartTotal' => (float)$cart->total]
-            ], '/products');
+            return $this->response
+                ->withType('application/json')
+                ->withStringBody(json_encode([
+                    'success' => true,
+                    'message' => 'Added to cart successfully!',
+                    'data' => ['cartTotal' => (float)$cart->total],
+                ]));
         } catch (RecordNotFoundException $e) {
-            return $this->respondError('Product not found', 404, '/products');
+            return $this->response
+                ->withType('application/json')
+                ->withStatus(404)
+                ->withStringBody(json_encode([
+                    'success' => false,
+                    'message' => 'Product not found',
+                ]));
         } catch (\Exception $e) {
             Log::error('Cart Add Error: ' . $e->getMessage());
-            return $this->respondError('Could not add to cart!', 500, '/products');
+            return $this->response
+                ->withType('application/json')
+                ->withStatus(500)
+                ->withStringBody(json_encode([
+                    'success' => false,
+                    'message' => 'Could not add to cart!',
+                ]));
         }
     }
     
@@ -81,31 +106,57 @@ class CartController extends AppController
             $quantity = (int)$this->request->getData('quantity', 1);
         
             if ($quantity <= 0) {
-                return $this->respondError('Invalid quantity', 400);
+                return $this->response
+                    ->withType('application/json')
+                    ->withStatus(400)
+                    ->withStringBody(json_encode([
+                        'success' => false,
+                        'message' => 'Invalid quantity',
+                    ]));
             }
         
             $product = $productTable->getActiveProductWithDetails($cartItem->product_id);
             if ($quantity > $product->stock) {
-                return $this->respondError('Quantity exceeds available stock!', 400);
+                return $this->response
+                    ->withType('application/json')
+                    ->withStatus(400)
+                    ->withStringBody(json_encode([
+                        'success' => false,
+                        'message' => 'Quantity exceeds available stock!',
+                    ]));
             }
         
             $cartItemTable->updateQuantity($cartItem, $quantity);
             $cart = $this->getCart();
         
-            return $this->respondSuccess([
-                'message' => 'Cart updated successfully!',
-                'data' => [
-                    'itemSubtotal' => (float)$cartItem->quantity * (float)$cartItem->price,
-                    'cartTotal' => (float)$cart->total,
-                    'cartTotalWithShipping' => (float)$cart->total,
-                    'totalItems' => $cart->total_items
-                ]
-            ], '/cart');
-        
+            return $this->response
+                ->withType('application/json')
+                ->withStringBody(json_encode([
+                    'success' => true,
+                    'message' => 'Cart updated successfully!',
+                    'data' => [
+                        'itemSubtotal' => (float)$cartItem->quantity * (float)$cartItem->price,
+                        'cartTotal' => (float)$cart->total,
+                        'cartTotalWithShipping' => (float)$cart->total,
+                        'totalItems' => $cart->total_items
+                    ]
+                ]));
         } catch (RecordNotFoundException $e) {
-            return $this->respondError('Cart item not found', 404, '/cart');
+            return $this->response
+                ->withType('application/json')
+                ->withStatus(404)
+                ->withStringBody(json_encode([
+                    'success' => false,
+                    'message' => 'Cart item not found',
+                ]));
         } catch (\Exception $e) {
-            return $this->respondError('Could not update cart!', 500, '/cart');
+            return $this->response
+                ->withType('application/json')
+                ->withStatus(500)
+                ->withStringBody(json_encode([
+                    'success' => false,
+                    'message' => 'Could not update cart!',
+                ]));
         }
     }
     
@@ -119,13 +170,33 @@ class CartController extends AppController
         
         $cartItem = $cartItemTable->get($itemId);
         
-        if ($cartItemTable->delete($cartItem)) {
-            $this->Flash->success('Item removed from cart successfully!');
-        } else {
-            $this->Flash->error('Could not remove item!');
+        try {
+            if ($cartItemTable->delete($cartItem)) {
+                return $this->response
+                    ->withType('application/json')
+                    ->withStringBody(json_encode([
+                        'success' => true,
+                        'message' => 'Item removed from cart successfully!',
+                    ]));
+            } else {
+                return $this->response
+                    ->withType('application/json')
+                    ->withStatus(400)
+                    ->withStringBody(json_encode([
+                        'success' => false,
+                        'message' => 'Could not remove item!',
+                    ]));
+            }
+        } catch (\Exception $e) {
+            return $this->response
+                ->withType('application/json')
+                ->withStatus(500)
+                ->withStringBody(json_encode([
+                    'success' => false,
+                    'message' => 'Could not remove item!',
+                    "error" => $e->getMessage(),
+                ]));
         }
-        
-        return $this->redirect(['action' => 'index']);
     }
     
     /**
@@ -139,8 +210,12 @@ class CartController extends AppController
         
         $this->fetchTable('CartItems')->deleteAll(['cart_id' => $cart->id]);
         
-        $this->Flash->success('Cart cleared successfully!');
-        return $this->redirect(['action' => 'index']);
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode([
+                'success' => true,
+                'message' => 'Cart cleared successfully!',
+            ]));
     }
     
     /**
