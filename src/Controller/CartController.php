@@ -2,8 +2,8 @@
 namespace App\Controller;
 
 use App\Controller\AppController;
-use Cake\ORM\TableRegistry;
-use Cake\Http\Exception\NotFoundException;use Cake\Log\Log;
+use Cake\Datasource\Exception\RecordNotFoundException;
+use Cake\Log\Log;
 
 class CartController extends AppController
 {
@@ -17,12 +17,22 @@ class CartController extends AppController
 
     public function index()
     {
+        $user = $this->Authentication->getIdentity();
+        if (!$user) {
+            return $this->response
+                ->withStatus(401)
+                ->withType('application/json')
+                ->withStringBody(json_encode([
+                    'status_code'=> 401,
+                    'error' => 'Authentication required'
+                ]));
+        }
         // use cart fetched from AppController
         $cart = $this->viewBuilder()->getVar('headerCart');
         if (!$cart) {
-            $cart = $this->getCart();
+            $cart = $this->getCart($user);
         }
-        $this->set('cart', $cart);
+        // $this->set('cart', $cart);
         return $this->response
             ->withType('application/json')
             ->withStringBody(json_encode([
@@ -37,6 +47,9 @@ class CartController extends AppController
 
         try {
             $product = $this->fetchTable('Products')->getActiveProductWithDetails($reqData['product_id']);
+            if (!$product) {
+                throw new RecordNotFoundException('Product not found');
+            }
             $quantity = (int)($reqData['quantity'] ?? 1);
             $cart = $this->getCart();
 
@@ -87,7 +100,7 @@ class CartController extends AppController
                 ->withStatus(500)
                 ->withStringBody(json_encode([
                     'success' => false,
-                    'message' => 'Could not add to cart!',
+                    'message' => $e->getMessage(),
                 ]));
         }
     }
@@ -221,10 +234,8 @@ class CartController extends AppController
     /**
      * Helper: Get current cart
      */
-    private function getCart()
-    {
-        $user = $this->Authentication->getIdentity();
-        
+    private function getCart($user = null)
+    {   
         if ($user) {
             return $this->fetchTable('Carts')->getOrCreateCart($user->id);
         } else {

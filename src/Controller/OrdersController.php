@@ -48,6 +48,12 @@ class OrdersController extends AppController
     public function index()
     {
         $user = $this->Authentication->getIdentity();
+        if (!$user) {
+            return $this->response
+                ->withStatus(401)
+                ->withType('application/json')
+                ->withStringBody(json_encode(['error' => 'Authentication required']));
+        }
         // For test form display only
         $orders = $this->Orders->find()
             ->where(['user_id' => $user->id])
@@ -68,6 +74,15 @@ class OrdersController extends AppController
         
         if ($this->request->is('post')) {
             $data = $this->request->getData();
+            if (empty($data['payment_method'])) {
+                return $this->response
+                    ->withType('application/json')
+                    ->withStatus(400)
+                    ->withStringBody(json_encode([
+                        'success' => false,
+                        'message' => 'Payment method is required!',
+                    ]));
+            }
             $user = $this->Authentication->getIdentity();
             $order = $this->Orders->createOrderFromUser($user, $data);
 
@@ -94,10 +109,6 @@ class OrdersController extends AppController
                                 'order_info' => 'VNPay payment',
                             ]
                         ]);
-
-                    default:
-                           $this->Flash->error('Invalid payment method!');
-                        return $this->redirect(['action' => 'index']);
                 }
             } else {
                 //    $this->Flash->error('Could not create order!');
@@ -111,7 +122,7 @@ class OrdersController extends AppController
             }
         }
         
-        $this->set(compact('order'));
+        // $this->set(compact('order'));
         return $this->response
             ->withType('application/json')
             ->withStringBody(json_encode([
@@ -126,14 +137,30 @@ class OrdersController extends AppController
     public function checkout()
     {
         $cartItemsTable = $this->fetchTable('CartItems');
+        if ($this->request->getQuery('cart_id') == null) {
+            return $this->response
+                ->withStatus(400)
+                ->withType('application/json')
+                ->withStringBody(json_encode([
+                    'success' => false,
+                    'message' => 'cart_id is required',
+                ]));
+        }
         $cartItems = $cartItemsTable->find()
-            ->where(['cart_id' => $this->request->getQuery('cart_id')])
+            ->where([
+                'cart_id' => $this->request->getQuery('cart_id'),
+            ])
             ->contain(['Products'])
             ->all();
 
         if (empty($cartItems->toArray())) {
-            $this->Flash->error('Cart is empty. Please add products before checkout.');
-            return $this->redirect(['controller' => 'Products', 'action' => 'index']);
+            return $this->response
+                ->withStatus(400)
+                ->withType('application/json')
+                ->withStringBody(json_encode([
+                    'success' => false,
+                    'message' => 'Cart is empty. Please add products before checkout.',
+                ]));
         }
 
         $total = 0;
@@ -151,7 +178,17 @@ class OrdersController extends AppController
             $order->customer_phone = $user->phone ?? null;
         }
 
-        $this->set(compact('cartItems', 'order', 'total'));
+        // $this->set(compact('cartItems', 'order', 'total'));
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode([
+                'success' => true,
+                'data' => [
+                    'cart_items' => $cartItems,
+                    'order' => $order,
+                    'total' => $total
+                ],
+            ]));
     }
 
     /**
@@ -192,12 +229,22 @@ class OrdersController extends AppController
     public function view($id = null)
     {
         $user = $this->Authentication->getIdentity();
+        if (!$user) {
+            return $this->response
+                ->withStatus(401)
+                ->withType('application/json')
+                ->withStringBody(json_encode(['error' => 'Authentication required']));
+        }
         $order = $this->Orders->get(
             primaryKey: $id,
             options: ['contain' => ['OrderItems']]
         );
         if ($order->user_id != $user->id && $user->role != 'admin') {
-            throw new ForbiddenException('You do not have permission to view this order!');
+            // throw new ForbiddenException('You do not have permission to view this order!');
+            return $this->response
+                ->withStatus(403)
+                ->withType('application/json')
+                ->withStringBody(json_encode(['error' => 'You do not have permission to view this order!']));
         }
         // get order items
         $orderItems = $this->Orders->OrderItems->find()

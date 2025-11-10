@@ -63,6 +63,12 @@ class AppController extends Controller
         
         // get current user info
         $user = $this->Authentication->getIdentity();
+        if (!$user) {
+            return $this->response
+                ->withStatus(401)
+                ->withType('application/json')
+                ->withStringBody(json_encode(['error' => 'Authentication required']));
+        }
         $this->set('currentUser', $user);
         
         // Only populate header cart for full page GET requests (avoid doing this for
@@ -94,7 +100,10 @@ class AppController extends Controller
     {
         if (!$this->isAdmin()) {
             $this->Flash->error('Do not have access permission!');
-            return $this->redirect(['controller' => 'Products', 'action' => 'index']);
+            return $this->response
+                ->withStatus(403)
+                ->withType('application/json')
+                ->withStringBody(json_encode(['error' => 'Access denied']));
         }
         return null;
     }

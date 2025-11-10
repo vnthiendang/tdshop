@@ -2,13 +2,8 @@
 namespace App\Controller;
 
 use App\Controller\AppController;
-use Cake\ORM\TableRegistry;
 use Cake\Log\Log;
 use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
-use App\Controller\Request;
-use App\Controller\Response;
-use Cake\Core\Configure;
 
 class UsersController extends AppController
 {
@@ -20,19 +15,19 @@ class UsersController extends AppController
     public function beforeFilter(\Cake\Event\EventInterface $event)
     {
         parent::beforeFilter($event);
-        
+
         $this->Authentication->allowUnauthenticated(['login', 'register']);
     }
-    
+
     /**
      * register new user
      */
     public function register()
     {
         $user = $this->Users->newEmptyEntity();
-        
+
         if ($this->request->is('post')) {
-            
+
             $user = $this->Users->patchEntity($user, $this->request->getData());
             $user->status = 'active';
             Log::error('Register user Data: ' . json_encode($user));
@@ -44,7 +39,7 @@ class UsersController extends AppController
                         'success' => true,
                         'message' => 'Registration successful! Please login.',
                     ]));
-                
+
             }
             // Log validation errors for debugging
             if ($user->getErrors()) {
@@ -58,9 +53,9 @@ class UsersController extends AppController
                     ]));
             }
         }
-        
+
     }
-    
+
     /**
      * login user
      */
@@ -94,12 +89,12 @@ class UsersController extends AppController
 
         if ($this->request->is('post') && !$result->isValid()) {
             return $this->response
-            ->withType('application/json')
-            ->withStatus(401)
-            ->withStringBody(json_encode(['success' => false, 'error' => 'Invalid credentials']));
+                ->withType('application/json')
+                ->withStatus(401)
+                ->withStringBody(json_encode(['success' => false, 'error' => 'Invalid credentials']));
         }
     }
-    
+
     /**
      * Logout
      */
@@ -133,12 +128,12 @@ class UsersController extends AppController
 
             if ($this->Users->save($userEntity)) {
                 return $this->response
-                ->withType('application/json')
-                ->withStringBody(json_encode([
-                    'message' => 'Profile updated successfully!',
-                    // 'success' => true,
-                    'data' => $userEntity,
-                ]));
+                    ->withType('application/json')
+                    ->withStringBody(json_encode([
+                        'message' => 'Profile updated successfully!',
+                        // 'success' => true,
+                        'data' => $userEntity,
+                    ]));
             }
 
             return $this->response
@@ -158,17 +153,17 @@ class UsersController extends AppController
     {
         $user = $this->Authentication->getIdentity();
         $userEntity = $this->Users->get($user->id);
-        
+
         if ($this->request->is(['post', 'put'])) {
             // Verify old password
             $hasher = new \Authentication\PasswordHasher\DefaultPasswordHasher();
             $oldPassword = $this->request->getData('old_password');
-            
+
             if (!$hasher->check($oldPassword, $userEntity->password)) {
                 $this->Flash->error('Current password is incorrect!');
             } else {
                 $userEntity->password = $this->request->getData('new_password');
-                
+
                 if ($this->Users->save($userEntity)) {
                     $this->Flash->success('Password changed successfully!');
                     return $this->redirect(['action' => 'profile']);
@@ -182,20 +177,20 @@ class UsersController extends AppController
     {
         $sessionId = $this->request->getSession()->id();
         $user = $this->Authentication->getIdentity();
-        
+
         // Find session cart
         $sessionCart = $this->fetchTable('Carts')
             ->find()
             ->where(['session_id' => $sessionId, 'user_id IS' => null])
             ->first();
-        
+
         if ($sessionCart) {
             // Find or create user cart
             $userCart = $this->fetchTable('Carts')->getOrCreateCart($user->id);
-            
+
             // Transfer items from session cart to user cart
             $cartItemsTable = $this->fetchTable('CartItems');
-            
+
             foreach ($sessionCart->cart_items as $sessionItem) {
                 // Check if product already exists in user cart
                 $existingItem = $cartItemsTable->find()
@@ -204,7 +199,7 @@ class UsersController extends AppController
                         'product_id' => $sessionItem->product_id
                     ])
                     ->first();
-                
+
                 if ($existingItem) {
                     // If exists, update quantity
                     $existingItem->quantity += $sessionItem->quantity;
@@ -220,7 +215,7 @@ class UsersController extends AppController
                     $cartItemsTable->save($newItem);
                 }
             }
-            
+
             // Delete session cart
             $this->fetchTable('Carts')->delete($sessionCart);
         }
